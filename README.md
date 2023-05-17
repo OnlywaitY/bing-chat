@@ -21,3 +21,13 @@ npx create-next-app -e https://github.com/shadcn/next-template
 ## License
 
 Licensed under the [MIT license](https://github.com/shadcn/ui/blob/main/LICENSE.md).
+
+~~1.滚动条~~
+2.消息样式
+3.消息显示优化
+~~4.建议框~~
+~~5.模式切换~~
+~~6.越狱切换~~
+7.历史对话加载(根据不同模式分别保存)
+8.消息编辑功能
+9.错误提示

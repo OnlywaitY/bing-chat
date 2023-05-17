@@ -1,12 +1,18 @@
 "use client"
 
-import { Eraser } from "lucide-react"
+import { siteConfig } from "@/config/site"
+import { Eraser, Languages } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
+import { Toggle } from "@/components/ui/toggle"
+import ReactMarkdown from 'react-markdown'
+import remarkBreaks from 'remark-breaks'
+import remarkGfm from 'remark-gfm'
+import SyntaxHighlighter from 'react-syntax-highlighter'
 import * as React from "react"
 
 
@@ -16,7 +22,7 @@ let websocket: WebSocket;
 // WebSocket related functions
 async function connectWebSocket() {
   return new Promise<void>((resolve, reject) => {
-    websocket = new WebSocket(`ws://localhost:65432/ws/`)
+    websocket = new WebSocket(`ws://` + siteConfig.bingClient + `/ws/`)
 
     websocket.onopen = () => {
       resolve()
@@ -54,15 +60,41 @@ export default function IndexPage() {
     }
   }, [fileContent]);
 
+  const containerRef = React.useRef(null);
+  React.useEffect(() => {
+    if (containerRef.current && containerRef.current.children[1]) {
+      const element = containerRef.current.children[1];
+      const targetScrollTop = element.scrollHeight - element.clientHeight;
+      element.scrollTo({
+        top: targetScrollTop,
+        behavior: 'smooth'
+      });
+    }
+  }, [previousMessages]);
 
+  const [chatMode, setChatMode] = React.useState('creative');
+  React.useEffect(() => {
+    if (chatMode === 'creative') {
+      setPreviousMessages(defaultMessages)
+    } else {
+      setPreviousMessages([])
+    }
+  }, [chatMode])
+
+  const [hoverArray, setHoverArray] = React.useState(Array.from({ length: 0 }, () => false));
   const [userInput, setUserInput] = React.useState('');
   const enterMode = 'enter';
-  const [chatMode, setChatMode] = React.useState('creative');
-  const [responding, setResponding] = React.useState(false)
-  const appendMessage = message => {
-    setPreviousMessages(prevMessages => [...prevMessages, message])
+  const [responding, setResponding] = React.useState(false);
+  const [enSearch, setEnSearch] = React.useState(false);
+  const appendMessage = (message: { tag: string; text: any; hiddenText?: any }) => {
+    setPreviousMessages(prevMessages => {
+      if (prevMessages.length > 0 && prevMessages[prevMessages.length - 1].tag === "[system](#waiting)") {
+        prevMessages.pop()
+      }
+      return [...prevMessages, message]
+    });
   }
-  const updateMessage = message => {
+  const updateMessage = (message: any) => {
     setPreviousMessages(prevMessages => {
       const updatedMessages = [...prevMessages]
       updatedMessages[updatedMessages.length - 1] = {
@@ -75,9 +107,12 @@ export default function IndexPage() {
 
   const sendMessage = async () => {
     if (responding) return
-    const inputText = userInput.trim()
+    let inputText = userInput.trim()
     if (inputText === '') return
     setResponding(true)
+    if (enSearch) {
+      inputText = inputText + '【使用英文进行搜索并使用中文回答我】'
+    }
     appendMessage({ tag: "[user](#message)", text: inputText })
     setUserInput('')
     try {
@@ -87,6 +122,24 @@ export default function IndexPage() {
     }
     setResponding(false)
   };
+
+  const handleUserInputKeyDown = (event: any) => {
+    if (event.shiftKey) return
+    if ((enterMode === 'enter' && event.key === 'Enter' && !event.ctrlKey)) {
+      event.preventDefault();
+      sendMessage();
+    }
+  }
+
+  const messageClass = (msg: { tag: string }) => {
+    let className = `flex`
+    if (msg.tag.startsWith('[user]')) {
+      className += ` justify-end`
+    } else {
+      className += ` justify-start`
+    }
+    return className
+  }
 
   const streamOutput = async (userInput: string) => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
@@ -99,10 +152,10 @@ export default function IndexPage() {
     }
     websocket.send(JSON.stringify({
       message: userInput,
-      chatMode: "creative",
+      chatMode: chatMode,
       context: formatPreviousMessages(previousMessages)
     }))
-
+    appendMessage({ tag: "[system](#waiting)", text: "waiting..." })
     return new Promise<void>((resolve, reject) => {
       function finished() {
         resolve()
@@ -141,7 +194,7 @@ export default function IndexPage() {
                 updateMessage({
                   text: message.adaptiveCards[0].body[0].text,
                   hiddenText: message.text,
-                  suggestions: message.suggestedResponses?.map(res => res.text)
+                  suggestions: message.suggestedResponses?.map((res: { text: any }) => res.text)
                 })
                 if (message.suggestedResponses) finished()
               }
@@ -172,38 +225,69 @@ export default function IndexPage() {
         </CardHeader>
         <CardContent>
           <div className="flex justify-center items-center space-x-4 p-4">
-            <Tabs className="" defaultValue="account">
+            <Tabs className="" defaultValue="creative">
               <TabsList>
-                <TabsTrigger className="w-[12rem]" value="account">Account</TabsTrigger>
-                <TabsTrigger className="w-[12rem]" value="password">Password</TabsTrigger>
-                <TabsTrigger className="w-[12rem]" value="password">Password</TabsTrigger>
+                <TabsTrigger className="w-[12rem]" value="creative" onClick={() => setChatMode("creative")}>creative</TabsTrigger>
+                <TabsTrigger className="w-[12rem]" value="balanced" onClick={() => setChatMode("balanced")}>balanced</TabsTrigger>
+                <TabsTrigger className="w-[12rem]" value="precise" onClick={() => setChatMode("precise")}>precise</TabsTrigger>
               </TabsList>
             </Tabs>
           </div>
 
-          <ScrollArea className="items-center h-72">
-          {previousMessages.map((msg, index) => (
-            <div className="flex justify-end ">
-              <Card className="m-2 max-w-3xl">
-                <CardContent className="break-words p-3">
-                {msg.text}
-                </CardContent>
-              </Card>
-            </div>
-          ))}
-
-        
+          <ScrollArea className="items-center h-96" ref={containerRef}>
+            {previousMessages.map((msg, index) => (
+              <div key={index} className={messageClass(msg)}>
+                <Card className="m-2 max-w-3xl">
+                  <CardContent className="break-words p-3">
+                    <ReactMarkdown
+                      linkTarget="_blank"
+                      remarkPlugins={[remarkBreaks, remarkGfm]}
+                      components={{
+                        code: ({ language, children }) =>
+                          <>
+                            <button onClick={e => copyCode(e.target)}>Copy code</button>
+                            <SyntaxHighlighter language={language}>
+                              {children}
+                            </SyntaxHighlighter>
+                          </>
+                      }}>
+                      {msg.text}
+                    </ReactMarkdown>
+                  </CardContent>
+                </Card>
+              </div>
+            ))}
           </ScrollArea>
 
           <div className="flex gap-1.5 pb-2 justify-end">
-            <Badge variant="secondary">谢谢你的帮助</Badge>
-            <Badge variant="secondary">我还有其他问题</Badge>
-            <Badge variant="secondary">我想了解如何安装</Badge>
+            {(previousMessages[previousMessages.length - 1]?.revoked ?
+              ["Continue from your last sentence", "从你的上一句话继续", "あなたの最後の文から続けてください"] :
+              previousMessages[previousMessages.length - 1]?.suggestions)?.map((suggestion: string, index: number) =>
+                <Badge variant={hoverArray[index] ? "secondary" : "outline"} className="hover:cursor-pointer text-sm"
+                  onClick={() => setUserInput(suggestion)}
+                  onMouseEnter={() => {
+                    let newArray = Array.from({ length: hoverArray.length }, () => false);
+                    newArray[index] = true;
+                    setHoverArray(newArray);
+                  }}
+                  onMouseLeave={() => {
+                    let newArray = [...hoverArray];
+                    newArray[index] = false;
+                    setHoverArray(newArray);
+                  }}>
+                  {suggestion}
+                </Badge>
+              )
+            }
           </div>
 
           <div className="flex gap-1.5">
-            <Button variant="outline"><Eraser /></Button>
-            <Textarea className="h-10" placeholder="Type your message here." value={userInput} onChange={event => setUserInput(event.target.value)}/>
+            {/* <Button variant="outline"><Eraser /></Button> */}
+            <Toggle aria-label="Toggle italic" onClick={event => setEnSearch(!enSearch)}><Languages /></Toggle>
+            <Textarea className="h-10" placeholder="Type your message here and press Enter to send."
+              value={userInput}
+              onChange={event => setUserInput(event.target.value)}
+              onKeyDown={handleUserInputKeyDown} />
           </div>
 
         </CardContent>
@@ -211,7 +295,7 @@ export default function IndexPage() {
           <div className="space-x-2">
             <Button variant="outline">Cancel</Button>
             <Button variant="outline">Save</Button>
-            <Button variant="outline" onClick={() => sendMessage()}>Submit</Button>
+            <Button variant="outline" onClick={() => sendMessage()}>Send</Button>
           </div>
         </CardFooter>
       </Card>
