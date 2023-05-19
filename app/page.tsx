@@ -1,7 +1,7 @@
 "use client"
 
 import { siteConfig } from "@/config/site"
-import { Eraser, Languages } from "lucide-react"
+import { Eraser, Languages, AlertCircle } from "lucide-react"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -9,6 +9,7 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
 import { Badge } from "@/components/ui/badge"
 import { Toggle } from "@/components/ui/toggle"
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import ReactMarkdown from 'react-markdown'
 import remarkBreaks from 'remark-breaks'
 import remarkGfm from 'remark-gfm'
@@ -86,6 +87,8 @@ export default function IndexPage() {
   const enterMode = 'enter';
   const [responding, setResponding] = React.useState(false);
   const [enSearch, setEnSearch] = React.useState(false);
+  const [showAlert, setShowAlert] = React.useState(true);
+  const [errorMsg, setErrorMsg] = React.useState('');
   const appendMessage = (message: { tag: string; text: any; hiddenText?: any }) => {
     setPreviousMessages(prevMessages => {
       if (prevMessages.length > 0 && prevMessages[prevMessages.length - 1].tag === "[system](#waiting)") {
@@ -118,6 +121,7 @@ export default function IndexPage() {
     try {
       await streamOutput(inputText)
     } catch (error) {
+      showErrorAlter(`fatch error ${error}`)
       alert(error)
     }
     setResponding(false)
@@ -141,11 +145,20 @@ export default function IndexPage() {
     return className
   }
 
+  const showErrorAlter = (msg: string) => {
+    setErrorMsg(msg)
+    setShowAlert(true);
+    setTimeout(() => {
+      setShowAlert(false);
+    }, 5000);
+  }
+
   const streamOutput = async (userInput: string) => {
     if (!websocket || websocket.readyState !== WebSocket.OPEN) {
       try {
         await connectWebSocket()
       } catch (error) {
+        showErrorAlter(`WebSocket error ${error}`)
         alert(`WebSocket error: ${error}`)
         return
       }
@@ -188,6 +201,7 @@ export default function IndexPage() {
                 })
               } else if (message.contentOrigin === 'Apology') {
                 alert('Message revoke detected')
+                showErrorAlter('Message revoke detected')
                 updateMessage({ revoked: true })
                 finished()
               } else {
@@ -211,18 +225,16 @@ export default function IndexPage() {
       }
       websocket.onerror = (error) => {
         alert(`WebSocket error: ${error}`)
+        showErrorAlter(`WebSocket error ${error}`)
         reject(error)
       }
     })
   };
 
   return (
-    <section className="container flex md:py-10 h-full">
+    <section className="container flex md:py-4 h-full">
       <Card className="w-full">
-        <CardHeader>
-          <CardTitle>Create project</CardTitle>
-          <CardDescription>Deploy your new project in one-click.</CardDescription>
-        </CardHeader>
+
         <CardContent>
           <div className="flex justify-center items-center space-x-4 p-4">
             <Tabs className="" defaultValue="creative">
@@ -234,7 +246,7 @@ export default function IndexPage() {
             </Tabs>
           </div>
 
-          <ScrollArea className="items-center h-96" ref={containerRef}>
+          <ScrollArea className="items-center h-[38rem]" ref={containerRef}>
             {previousMessages.map((msg, index) => (
               <div key={index} className={messageClass(msg)}>
                 <Card className="m-2 max-w-3xl">
@@ -291,7 +303,16 @@ export default function IndexPage() {
           </div>
 
         </CardContent>
-        <CardFooter className="flex justify-end">
+        <CardFooter className={`flex ${showAlert ? "justify-between" : "justify-end"}`}>
+          {showAlert && (
+            <Alert className="w-1/2" variant="destructive">
+              <AlertCircle className="h-4 w-4" />
+              <AlertTitle>Error</AlertTitle>
+              <AlertDescription>
+                {errorMsg}
+              </AlertDescription>
+            </Alert>
+          )}
           <div className="space-x-2">
             <Button variant="outline">Cancel</Button>
             <Button variant="outline">Save</Button>

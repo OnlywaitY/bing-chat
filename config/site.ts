@@ -1,9 +1,9 @@
 export type SiteConfig = typeof siteConfig
 
 export const siteConfig = {
-  name: "Next.js",
+  name: "Bing chat",
   description:
-    "Beautifully designed components built with Radix UI and Tailwind CSS.",
+    "A web client of bing chat",
   mainNav: [
     {
       title: "Home",
@@ -11,9 +11,10 @@ export const siteConfig = {
     },
   ],
   links: {
-    twitter: "https://twitter.com/shadcn",
-    github: "https://github.com/shadcn/ui",
-    docs: "https://ui.shadcn.com",
+    twitter: "",
+    github: "https://github.com/OnlywaitY",
+    blog: "https://onlywaityblog.netlify.app",
+    docs: "",
   },
   bingClient: "localhost:65432"
 }
