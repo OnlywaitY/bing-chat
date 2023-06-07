@@ -264,7 +264,7 @@ export default function IndexPage() {
             <Toggle className="px-2" aria-label="Toggle italic" onClick={() => setEditMsg(!editMsg)}><Edit /></Toggle>
           </div>
 
-          <ScrollArea className="items-center h-[37rem]" ref={scrollArea}>
+          <ScrollArea className="items-center h-[35rem]" ref={scrollArea}>
             {previousMessages.map((msg: any, index: any) => (
               <ChatBox index={index} msg={msg} editMsg={editMsg} clearMessage={clearMessage} />
             ))}
