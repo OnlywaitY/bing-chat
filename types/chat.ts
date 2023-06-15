@@ -14,6 +14,7 @@ export const ChatModels: Record<ChatModelID, string> = {
 export interface Message {
     tag?: Tag
     text?: string
+    error?: boolean
     hiddenText?: string
     suggestions?: [string]
     searchResults?: string
@@ -23,7 +24,6 @@ export interface Message {
 export enum Tag {
     user_msg = '[user](#message)',
     system_instructions = '[system](#additional_instructions)',
-    system_waiting = '[system](#waiting)',
     assistant_suggest = '[assistant](#suggestions)',
     assistant_search = '[assistant](#search_results)',
     assistant_query = '[assistant](#search_query)',
