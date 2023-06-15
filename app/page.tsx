@@ -1,7 +1,7 @@
 "use client"
 
 import { siteConfig } from "@/config/site"
-import { Languages, AlertCircle, Eraser, Send, Edit } from "lucide-react"
+import { Languages, AlertCircle, Eraser, Send, Edit, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
@@ -13,6 +13,7 @@ import ChatModelsTabs from '@/components/chat/chat-model-tabs'
 import ChatBox from '@/components/chat/chat-box'
 import SuggestBox from '@/components/chat/suggest-box'
 import { ChatModels, Message, ErrorMessage, Tag } from '@/types/chat'
+import { cn } from "@/lib/utils"
 import * as React from "react"
 
 // token计数器
@@ -99,6 +100,7 @@ export default function IndexPage() {
   const enterMode = 'enter';
   // 等待响应时阻塞
   const [responding, setResponding] = React.useState(false);
+  const [showRespondLoading, setShowRespondLoading] = React.useState(false);
   // 开启英文搜索模式
   const [enSearch, setEnSearch] = React.useState(false);
   // 错误提示框
@@ -108,9 +110,6 @@ export default function IndexPage() {
   // 添加消息到历史消息
   const appendMessage = (message: Message) => {
     setPreviousMessages((prevMessages: Message[]) => {
-      if (prevMessages.length > 0 && prevMessages[prevMessages.length - 1].tag === "[system](#waiting)") {
-        prevMessages.pop()
-      }
       return [...prevMessages, message]
     });
   }
@@ -139,13 +138,26 @@ export default function IndexPage() {
       }
     }
   }
+  // 重新发送该消息
+  const resendMessage = (index: any) => {
+    const newMessages = [...previousMessages];
+    const msg = newMessages[index].text
+    if (index == newMessages.length - 1) {
+      newMessages.pop()
+    }
+    setPreviousMessages(newMessages)
+    if (msg) {
+      setUserInput(msg);
+      sendMessage(msg);
+    }
+  }
   // 发送消息
-  const sendMessage = async () => {
+  const sendMessage = async (inputText: string) => {
     if (responding) return
-    let inputText = userInput.trim()
     if (inputText === '') return
     setResponding(true)
-    if (enSearch) {
+    setShowRespondLoading(true)
+    if (enSearch && !inputText.endsWith('【使用英文进行搜索并使用中文回答我】')) {
       inputText = inputText + '【使用英文进行搜索并使用中文回答我】'
     }
     appendMessage({ tag: Tag.user_msg, text: inputText })
@@ -155,15 +167,19 @@ export default function IndexPage() {
     } catch (error) {
       showErrorAlter(`fatch error ${error}`)
       alert(error)
+      updateMessage({ error: true })
     }
     setResponding(false)
+    setTimeout(() => {
+      setShowRespondLoading(false)
+    }, 1000);
   };
   // 处理回车键发送消息
   const handleUserInputKeyDown = (event: any) => {
     if (event.shiftKey) return
     if ((enterMode === 'enter' && event.key === 'Enter' && !event.ctrlKey)) {
       event.preventDefault();
-      sendMessage();
+      sendMessage(userInput.trim());
     }
   }
   // 错误信息提示
@@ -181,16 +197,17 @@ export default function IndexPage() {
         await connectWebSocket()
       } catch (error) {
         showErrorAlter(`WebSocket error ${error}`)
-        alert(`WebSocket error: ${error}`)
+        alert(error)
+        updateMessage({ error: true })
         return
       }
     }
     websocket.send(JSON.stringify({
       message: userInput,
       chatMode: chatMode,
-      context: formatPreviousMessages(previousMessages)
+      context: formatPreviousMessages(previousMessages),
+      locale: 'zh-CN'
     }))
-    appendMessage({ tag: Tag.system_waiting, text: "waiting..." })
     return new Promise<void>((resolve, reject) => {
       function finished() {
         resolve()
@@ -225,7 +242,7 @@ export default function IndexPage() {
               } else if (message.contentOrigin === 'Apology') {
                 alert('Message revoke detected')
                 showErrorAlter('Message revoke detected')
-                updateMessage({ revoked: true })
+                updateMessage({ revoked: true, error: true })
                 finished()
               } else {
                 updateMessage({
@@ -243,12 +260,14 @@ export default function IndexPage() {
           else
             reject("Looks like the user message has triggered the Bing filter")
         } else if (response.type === "error") {
+          updateMessage({ error: true })
           reject(response.error)
         }
       }
       websocket.onerror = (error) => {
         alert(`WebSocket error: ${error}`)
         showErrorAlter(`WebSocket error ${error}`)
+        updateMessage({ error: true })
         reject(error)
       }
     })
@@ -266,8 +285,17 @@ export default function IndexPage() {
 
           <ScrollArea className="items-center h-[35rem]" ref={scrollArea}>
             {previousMessages.map((msg: any, index: any) => (
-              <ChatBox index={index} msg={msg} editMsg={editMsg} clearMessage={clearMessage} />
+              <ChatBox index={index} msg={msg} editMsg={editMsg} clearMessage={clearMessage} resendMessage={resendMessage} />
             ))}
+            <div className={cn("absolute bottom-0 left-1/2 -translate-x-1/2 transition-all duration-1000",
+              responding ? "animate-in fade-in" : "animate-out fade-out")}>
+              {showRespondLoading &&
+                <Button disabled >
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Please wait
+                </Button>
+              }
+            </div>
           </ScrollArea>
 
           <div className="flex gap-1.5 pb-2 justify-end">
@@ -285,7 +313,7 @@ export default function IndexPage() {
               value={userInput}
               onChange={event => setUserInput(event.target.value)}
               onKeyDown={handleUserInputKeyDown} />
-            <Button variant="outline" onClick={() => sendMessage()}><Send /></Button>
+            <Button variant="outline" onClick={() => sendMessage(userInput.trim())}><Send /></Button>
           </div>
         </CardContent>
 

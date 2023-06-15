@@ -1,7 +1,7 @@
 export type SiteConfig = typeof siteConfig
 
 export const siteConfig = {
-  name: "Bing chat",
+  name: "Bing Chat",
   description:
     "A web client of bing chat",
   mainNav: [
