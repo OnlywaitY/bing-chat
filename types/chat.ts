@@ -36,4 +36,9 @@ export interface ErrorMessage {
     messageLines: String[];
 }
 
+export interface ChatSettings {
+    chatMode: string | ChatModelID.creative
+    editMsg: boolean | false
+    enSearch: boolean | false
+}
 

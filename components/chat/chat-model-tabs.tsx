@@ -1,26 +1,40 @@
 "use client"
 import React from 'react';
 import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { ChatModels } from '@/types/chat'
+import { ChatModels, ChatSettings } from '@/types/chat'
 
 interface ChatModelsTabsProps {
-    chatModel: string;
-    setChatMode: (mode: string) => void;
+    chatSetting: ChatSettings;
+    setChatSetting: (setting: ChatSettings) => void;
 }
 
-const ChatModelsTabs: React.FC<ChatModelsTabsProps> = ({ chatModel, setChatMode }) => {
+interface ChatModelTriggerProps {
+    chatMode: string
+    chatSetting: ChatSettings;
+    setChatSetting: (setting: ChatSettings) => void;
+}
+
+const ChatModelTrigger: React.FC<ChatModelTriggerProps> = ({ chatMode, chatSetting, setChatSetting }) => {
     return (
-        <Tabs className="" defaultValue={chatModel}>
+        <TabsTrigger className="w-[12rem]" value={chatMode}
+            onClick={() => {
+                setChatSetting({
+                    ...chatSetting,
+                    chatMode: chatMode
+                })
+            }}>
+            {chatMode}
+        </TabsTrigger>
+    )
+}
+
+const ChatModelsTabs: React.FC<ChatModelsTabsProps> = ({ chatSetting, setChatSetting }) => {
+    return (
+        <Tabs className="" defaultValue={chatSetting.chatMode}>
             <TabsList>
-                <TabsTrigger className="w-[12rem]" value={ChatModels.creative} onClick={() => setChatMode(ChatModels.creative)}>
-                    {ChatModels.creative}
-                </TabsTrigger>
-                <TabsTrigger className="w-[12rem]" value={ChatModels.balanced} onClick={() => setChatMode(ChatModels.balanced)}>
-                    {ChatModels.balanced}
-                </TabsTrigger>
-                <TabsTrigger className="w-[12rem]" value={ChatModels.precise} onClick={() => setChatMode(ChatModels.precise)}>
-                    {ChatModels.precise}
-                </TabsTrigger>
+                <ChatModelTrigger chatMode={ChatModels.creative} chatSetting={chatSetting} setChatSetting={setChatSetting} />
+                <ChatModelTrigger chatMode={ChatModels.balanced} chatSetting={chatSetting} setChatSetting={setChatSetting} />
+                <ChatModelTrigger chatMode={ChatModels.precise} chatSetting={chatSetting} setChatSetting={setChatSetting} />
             </TabsList>
         </Tabs>
     );

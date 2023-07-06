@@ -1,20 +1,20 @@
 "use client"
 
 import { siteConfig } from "@/config/site"
-import { Languages, AlertCircle, Eraser, Send, Edit, Loader2 } from "lucide-react"
+import { AlertCircle, Eraser, Send, Loader2 } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardFooter } from "@/components/ui/card"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Textarea } from "@/components/ui/textarea"
-import { Toggle } from "@/components/ui/toggle"
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert"
 import * as Tiktoken from 'js-tiktoken'
 import ChatModelsTabs from '@/components/chat/chat-model-tabs'
 import ChatBox from '@/components/chat/chat-box'
 import SuggestBox from '@/components/chat/suggest-box'
-import { ChatModels, Message, ErrorMessage, Tag } from '@/types/chat'
+import { ChatModels, ChatSettings, Message, Tag } from '@/types/chat'
 import { cn } from "@/lib/utils"
 import * as React from "react"
+import Setting from "@/components/chat/setting"
 
 // token计数器
 const enc = Tiktoken.encodingForModel("gpt-4")
@@ -25,7 +25,7 @@ const defaultMessages: Message[] = [{
 }];
 // key-v缓存
 const savedMessages = new Map<String, Message[]>(Object.entries(JSON.parse(localStorage.getItem('chatHistory') ?? "{}")))
-
+const savedSettings : ChatSettings = JSON.parse(localStorage.getItem('chatSetting') ?? "{}")
 // 定义webSocket
 let websocket: WebSocket;
 async function connectWebSocket() {
@@ -57,39 +57,56 @@ function formatPreviousMessages(messages: Message[]) {
 }
 
 export default function IndexPage() {
-  // 聊天模式（创造，平衡，精准）
-  const [chatMode, setChatMode] = React.useState(ChatModels.creative);
-  // 历史消息
-  const [previousMessages, setPreviousMessages] = React.useState<Message[]>(savedMessages.get(chatMode) ?? defaultMessages)
+  // 聊天设置
+  const [chatSetting, setChatSetting] = React.useState<ChatSettings>(savedSettings ?? { chatMode: ChatModels.creative, 
+    editMsg: false, enSearch: false });
   React.useEffect(() => {
-    if (chatMode === ChatModels.creative) {
-      setPreviousMessages(savedMessages.get(chatMode) ?? defaultMessages)
+    localStorage.setItem('chatSetting', JSON.stringify(chatSetting))
+  }, [chatSetting]);
+  // 历史消息
+  const [previousMessages, setPreviousMessages] = React.useState<Message[]>(savedMessages.get(chatSetting.chatMode) ?? defaultMessages)
+  React.useEffect(() => {
+    if (chatSetting.chatMode === ChatModels.creative) {
+      setPreviousMessages(savedMessages.get(chatSetting.chatMode) ?? defaultMessages)
     } else {
-      setPreviousMessages(savedMessages.get(chatMode) ?? [])
+      setPreviousMessages(savedMessages.get(chatSetting.chatMode) ?? [])
     }
-  }, [chatMode])
-  // 消息编辑
-  const [editMsg, setEditMsg] = React.useState(false);
+  }, [chatSetting.chatMode])
   // token计数器
   const [contextTokens, setContextTokens] = React.useState(0)
   // 历史消息更新时间（滚动屏幕、更新token计数器、更新keyv）
   const scrollArea = React.useRef(null);
   React.useEffect(() => {
     const asyncFun = async () => {
-      if (scrollArea.current && scrollArea.current.children[1]) {
+      if (scrollArea.current && scrollArea.current.children[1] && isScrollTop) {
         const element = scrollArea.current.children[1];
         const targetScrollTop = element.scrollHeight - element.clientHeight;
         element.scrollTo({
           top: targetScrollTop,
           behavior: 'smooth'
         });
-        savedMessages.set(chatMode, previousMessages);
-        localStorage.setItem('chatHistory', JSON.stringify(Object.fromEntries(savedMessages)))
-        setContextTokens(enc.encode(formatPreviousMessages(previousMessages)).length)
       }
+      savedMessages.set(chatSetting.chatMode, previousMessages);
+      localStorage.setItem('chatHistory', JSON.stringify(Object.fromEntries(savedMessages)))
+      setContextTokens(enc.encode(formatPreviousMessages(previousMessages)).length)
     };
     asyncFun();
   }, [previousMessages]);
+  // 是否自动滚动到结尾
+  const [isScrollTop, setIsScrollTop] = React.useState(false)
+  React.useEffect(() => {
+    const handleScroll = () => {
+      const element = scrollArea.current.children[1];
+      if (element.scrollHeight - element.scrollTop === element.clientHeight) {
+        setIsScrollTop(true)
+      } else {
+        setIsScrollTop(false)
+      }
+    };
+    if (scrollArea.current && scrollArea.current.children[1]) {
+      scrollArea.current.children[1].addEventListener('scroll', handleScroll, { passive: true });
+    }
+  }, [scrollArea]);
   // 用户输入
   const [userInput, setUserInput] = React.useState('');
   const [userInputTokens, setUserInputTokens] = React.useState(0)
@@ -101,8 +118,6 @@ export default function IndexPage() {
   // 等待响应时阻塞
   const [responding, setResponding] = React.useState(false);
   const [showRespondLoading, setShowRespondLoading] = React.useState(false);
-  // 开启英文搜索模式
-  const [enSearch, setEnSearch] = React.useState(false);
   // 错误提示框
   const [showAlert, setShowAlert] = React.useState(false);
   // 错误消息
@@ -131,7 +146,7 @@ export default function IndexPage() {
       newMessages.splice(index, 1);
       setPreviousMessages(newMessages);
     } else {
-      if (chatMode === ChatModels.creative) {
+      if (chatSetting.chatMode === ChatModels.creative) {
         setPreviousMessages(defaultMessages)
       } else {
         setPreviousMessages([])
@@ -151,13 +166,21 @@ export default function IndexPage() {
       sendMessage(msg);
     }
   }
+  const handleError = (error: any) => {
+    showErrorAlter(`fatch error ${error}`)
+    console.log(error)
+    updateMessage({ error: true })
+  }
+
   // 发送消息
   const sendMessage = async (inputText: string) => {
     if (responding) return
     if (inputText === '') return
     setResponding(true)
     setShowRespondLoading(true)
-    if (enSearch && !inputText.endsWith('【使用英文进行搜索并使用中文回答我】')) {
+    setErrorMsg('')
+    setShowAlert(false);
+    if (chatSetting.enSearch && !inputText.endsWith('【使用英文进行搜索并使用中文回答我】')) {
       inputText = inputText + '【使用英文进行搜索并使用中文回答我】'
     }
     appendMessage({ tag: Tag.user_msg, text: inputText })
@@ -165,9 +188,7 @@ export default function IndexPage() {
     try {
       await streamOutput(inputText)
     } catch (error) {
-      showErrorAlter(`fatch error ${error}`)
-      alert(error)
-      updateMessage({ error: true })
+      handleError(error)
     }
     setResponding(false)
     setTimeout(() => {
@@ -186,9 +207,6 @@ export default function IndexPage() {
   const showErrorAlter = (msg: string) => {
     setErrorMsg(msg)
     setShowAlert(true);
-    setTimeout(() => {
-      setShowAlert(false);
-    }, 5000);
   }
   // webSocket流处理
   const streamOutput = async (userInput: string) => {
@@ -196,15 +214,13 @@ export default function IndexPage() {
       try {
         await connectWebSocket()
       } catch (error) {
-        showErrorAlter(`WebSocket error ${error}`)
-        alert(error)
-        updateMessage({ error: true })
+        handleError(error)
         return
       }
     }
     websocket.send(JSON.stringify({
       message: userInput,
-      chatMode: chatMode,
+      chatMode: chatSetting.chatMode,
       context: formatPreviousMessages(previousMessages),
       locale: 'zh-CN'
     }))
@@ -214,7 +230,6 @@ export default function IndexPage() {
         websocket.onmessage = () => {
         }
       }
-
       websocket.onmessage = (event) => {
         const response = JSON.parse(event.data)
         console.log(response)
@@ -240,7 +255,6 @@ export default function IndexPage() {
                   hiddenText: message.text !== message.adaptiveCards[0].body[0].text ? message.text : null
                 })
               } else if (message.contentOrigin === 'Apology') {
-                alert('Message revoke detected')
                 showErrorAlter('Message revoke detected')
                 updateMessage({ revoked: true, error: true })
                 finished()
@@ -265,9 +279,7 @@ export default function IndexPage() {
         }
       }
       websocket.onerror = (error) => {
-        alert(`WebSocket error: ${error}`)
-        showErrorAlter(`WebSocket error ${error}`)
-        updateMessage({ error: true })
+        handleError(error)
         reject(error)
       }
     })
@@ -278,14 +290,13 @@ export default function IndexPage() {
       <Card className="w-full">
         <CardContent>
           <div className="flex justify-center items-center space-x-4 p-4">
-            <ChatModelsTabs chatModel={chatMode} setChatMode={setChatMode} />
-            <Toggle className="px-2" aria-label="Toggle italic" onClick={() => setEnSearch(!enSearch)}><Languages /></Toggle>
-            <Toggle className="px-2" aria-label="Toggle italic" onClick={() => setEditMsg(!editMsg)}><Edit /></Toggle>
+            <ChatModelsTabs chatSetting={chatSetting} setChatSetting={setChatSetting} />
+            <Setting chatSetting={chatSetting} setChatSetting={setChatSetting}></Setting>
           </div>
 
           <ScrollArea className="items-center h-[35rem]" ref={scrollArea}>
             {previousMessages.map((msg: any, index: any) => (
-              <ChatBox index={index} msg={msg} editMsg={editMsg} clearMessage={clearMessage} resendMessage={resendMessage} />
+              <ChatBox index={index} msg={msg} editMsg={chatSetting.editMsg} clearMessage={clearMessage} resendMessage={resendMessage} />
             ))}
             <div className={cn("absolute bottom-0 left-1/2 -translate-x-1/2 transition-all duration-1000",
               responding ? "animate-in fade-in" : "animate-out fade-out")}>
